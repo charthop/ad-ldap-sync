@@ -259,7 +259,7 @@ exports.handler = async event => {
     for (var i = 0; i < CHARTHOP_ORG_ID.split(",").length; i++) {
       const orgId = CHARTHOP_ORG_ID.split(",")[i];
       const token = CHARTHOP_TOKEN.split(",")[i];
-      var fetchJobs = await fetchCharthopJobs(orgId, token);
+      var fetchJobs = await fetchCharthopJobsV2(orgId, token);
       charthopJobs = [...charthopJobs, ...fetchJobs];
       console.log(
         "Fetched " + fetchJobs.length + " jobs from ChartHop org " + orgId
