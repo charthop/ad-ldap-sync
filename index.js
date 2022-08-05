@@ -48,6 +48,40 @@ async function fetchCharthopJobs(orgId, token) {
   });
 }
 
+async function fetchCharthopJobsV2(orgId, token) {
+  var fields = FIELDS.map(f => f.charthop).join(",");
+  for (let f of FIELDS) {
+    if (f.charthopExtraFields) {
+      fields += "," + f.charthopExtraFields;
+    }
+  }
+  fields = "jobId," + fields;
+  return new Promise((resolve, reject) => {
+    request(
+      "https://api.charthop.com/v2/org/" + orgId + "/job?" +
+        "limit=10000&format=minimal&q=open:filled&fields=" +
+        fields,
+      { auth: { bearer: token } },
+      function(err, resp, body) {
+        if (err) {
+          reject(err);
+        } else {
+          var bodyData = JSON.parse(body).data;
+          var results = [];
+          for (let row of bodyData) {
+            results.push({ id: row.jobId, ...row });
+          }
+          resolve(results);
+        }
+      }
+    );
+  });
+}
+
+exports.fetchCharthopJobs = fetchCharthopJobs
+exports.fetchCharthopJobsV2 = fetchCharthopJobsV2
+
+
 /** Send a notification email via ChartHop **/
 async function notifyCharthop(emailSubject, emailContentHtml) {
   return new Promise((resolve, reject) => {
