@@ -27,37 +27,6 @@ async function fetchCharthopJobs(orgId, token) {
   fields = "jobId," + fields;
   return new Promise((resolve, reject) => {
     request(
-      "https://api.charthop.com/v1/data/job?org=" +
-        orgId +
-        "&q=open:filled&fields=" +
-        fields,
-      { auth: { bearer: token } },
-      function(err, resp, body) {
-        if (err) {
-          reject(err);
-        } else {
-          var bodyData = JSON.parse(body).data;
-          var results = [];
-          for (let row of bodyData) {
-            results.push({ id: row.jobId, ...row });
-          }
-          resolve(results);
-        }
-      }
-    );
-  });
-}
-
-async function fetchCharthopJobsV2(orgId, token) {
-  var fields = FIELDS.map(f => f.charthop).join(",");
-  for (let f of FIELDS) {
-    if (f.charthopExtraFields) {
-      fields += "," + f.charthopExtraFields;
-    }
-  }
-  fields = "jobId," + fields;
-  return new Promise((resolve, reject) => {
-    request(
       "https://api.charthop.com/v2/org/" + orgId + "/job?" +
         "limit=10000&format=minimal&q=open:filled&fields=" +
         fields,
@@ -77,10 +46,6 @@ async function fetchCharthopJobsV2(orgId, token) {
     );
   });
 }
-
-exports.fetchCharthopJobs = fetchCharthopJobs
-exports.fetchCharthopJobsV2 = fetchCharthopJobsV2
-
 
 /** Send a notification email via ChartHop **/
 async function notifyCharthop(emailSubject, emailContentHtml) {
@@ -259,7 +224,7 @@ exports.handler = async event => {
     for (var i = 0; i < CHARTHOP_ORG_ID.split(",").length; i++) {
       const orgId = CHARTHOP_ORG_ID.split(",")[i];
       const token = CHARTHOP_TOKEN.split(",")[i];
-      var fetchJobs = await fetchCharthopJobsV2(orgId, token);
+      var fetchJobs = await fetchCharthopJobs(orgId, token);
       charthopJobs = [...charthopJobs, ...fetchJobs];
       console.log(
         "Fetched " + fetchJobs.length + " jobs from ChartHop org " + orgId
