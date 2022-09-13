@@ -27,9 +27,8 @@ async function fetchCharthopJobs(orgId, token) {
   fields = "jobId," + fields;
   return new Promise((resolve, reject) => {
     request(
-      "https://api.charthop.com/v1/data/job?org=" +
-        orgId +
-        "&q=open:filled&fields=" +
+      "https://api.charthop.com/v2/org/" + orgId + "/job?" +
+        "limit=10000&format=minimal&q=open:filled&fields=" +
         fields,
       { auth: { bearer: token } },
       function(err, resp, body) {
