@@ -28,10 +28,10 @@ async function fetchCharthopJobs(orgId, token) {
   return new Promise((resolve, reject) => {
     request(
       "https://api.charthop.com/v2/org/" + orgId + "/job?" +
-        "limit=10000&format=minimal&q=open:filled&fields=" +
-        fields,
+      "limit=10000&format=minimal&q=open:filled&fields=" +
+      fields,
       { auth: { bearer: token } },
-      function(err, resp, body) {
+      function (err, resp, body) {
         if (err) {
           reject(err);
         } else {
@@ -57,7 +57,7 @@ async function notifyCharthop(emailSubject, emailContentHtml) {
         json: { emailSubject, emailContentHtml },
         auth: { bearer: CHARTHOP_TOKEN_SINGLE }
       },
-      function(err, resp, body) {
+      function (err, resp, body) {
         if (err) {
           reject(err);
         } else {
@@ -76,7 +76,7 @@ async function connectLdap() {
     url: LDAP_URL
   });
   await new Promise((resolve, reject) => {
-    client.bind(LDAP_USER, LDAP_PASS, function(err, res) {
+    client.bind(LDAP_USER, LDAP_PASS, function (err, res) {
       if (err) {
         reject(err);
       } else {
@@ -98,20 +98,20 @@ async function fetchLdapJobs(ldapClient) {
     paged: true
   };
   return new Promise((resolve, reject) => {
-    ldapClient.search(LDAP_SEARCH, opts, function(error, res) {
+    ldapClient.search(LDAP_SEARCH, opts, function (error, res) {
       if (error) {
         reject(error);
       }
 
       var results = [];
 
-      res.on("searchEntry", function(entry) {
+      res.on("searchEntry", function (entry) {
         results.push(entry.object);
       });
-      res.on("error", function(err) {
+      res.on("error", function (err) {
         reject(err);
       });
-      res.on("end", function(result) {
+      res.on("end", function (result) {
         resolve(results);
       });
     });
@@ -160,7 +160,7 @@ async function syncJob(ldapClient, charthopJob, adJob, adJobs) {
         SYNC_ALLOWLIST.indexOf(adJob.cn) > -1
       ) {
         await new Promise((resolve, reject) => {
-          ldapClient.modify(adJob.dn, change, function(err, res) {
+          ldapClient.modify(adJob.dn, change, function (err, res) {
             if (err) {
               reject(err);
             } else {
@@ -185,7 +185,7 @@ function doesCharthopJobMatch(charthopJob, adJob) {
     adJob.mail &&
     charthopJob["contact.workEmail"] &&
     adJob.mail.toLowerCase().split("@")[0] ===
-      charthopJob["contact.workEmail"].split("@")[0]
+    charthopJob["contact.workEmail"].split("@")[0]
   ) {
     return true;
   }
@@ -293,10 +293,10 @@ exports.handler = async event => {
     await notifyCharthop(
       "Error completing sync",
       "<p>There was an unexpected error:</p><br/><div><code>" +
-        JSON.stringify(error) +
-        "</code></div>\n<br/><p>Stack trace:</p><pre>" +
-        error.stack +
-        "</pre>"
+      JSON.stringify(error) +
+      "</code></div>\n<br/><p>Stack trace:</p><pre>" +
+      error.stack +
+      "</pre>"
     );
 
     return {
