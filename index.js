@@ -11,9 +11,7 @@ var LDAP_USER = process.env.LDAP_USER;
 var LDAP_PASS = process.env.LDAP_PASS;
 var LDAP_SEARCH = process.env.LDAP_SEARCH;
 
-var SYNC_ALLOWLIST = process.env.SYNC_ALLOWLIST
-  ? process.env.SYNC_ALLOWLIST.split(",")
-  : [];
+var SYNC_ALLOWLIST = process.env.SYNC_ALLOWLIST ? process.env.SYNC_ALLOWLIST.split(",") : [];
 var SYNC_TESTMATCH = process.env.SYNC_TESTMATCH;
 
 /** Fetch all currently-filled ChartHop jobs from the org roster **/
@@ -141,10 +139,7 @@ async function syncJob(ldapClient, charthopJob, adJob, adJobs) {
 
       var changeLog = `${adJob.cn}/${field.ldap}: ${adJob[field.ldap]} => ${transformedValue}`;
 
-      if (
-        SYNC_ALLOWLIST.length === 0 ||
-        SYNC_ALLOWLIST.indexOf(adJob.cn) > -1
-      ) {
+      if (SYNC_ALLOWLIST.length === 0 || SYNC_ALLOWLIST.indexOf(adJob.cn) > -1) {
         await new Promise((resolve, reject) => {
           ldapClient.modify(adJob.dn, change, function (err, res) {
             if (err) {
@@ -170,8 +165,7 @@ function doesCharthopJobMatch(charthopJob, adJob) {
   if (
     adJob.mail &&
     charthopJob["contact.workEmail"] &&
-    adJob.mail.toLowerCase().split("@")[0] ===
-    charthopJob["contact.workEmail"].split("@")[0]
+    adJob.mail.toLowerCase().split("@")[0] === charthopJob["contact.workEmail"].split("@")[0]
   ) {
     return true;
   }
@@ -226,8 +220,7 @@ exports.handler = async event => {
 
     // in SYNC_TESTMATCH mode, always match the AD job matching the SYNC_TESTMATCH with a random ChartHop job
     if (SYNC_TESTMATCH) {
-      var testJob =
-        charthopJobs[Math.floor(Math.random() * charthopJobs.length)];
+      var testJob = charthopJobs[Math.floor(Math.random() * charthopJobs.length)];
       console.log(`Set test job to ${testJob.title} ${testJob.id}`);
       var testAdJobs = adJobs.filter(j => j.cn === SYNC_TESTMATCH);
       if (testAdJobs.length) {
@@ -271,7 +264,7 @@ exports.handler = async event => {
     await notifyCharthop(
       "Error completing sync",
       `<p>There was an unexpected error:</p><br/><div><code>${JSON.stringify(error)}</code></div>\n` +
-      `<br/><p>Stack trace:</p><pre>${error.stack}</pre>`
+        `<br/><p>Stack trace:</p><pre>${error.stack}</pre>`
     );
 
     return {
