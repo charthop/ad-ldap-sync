@@ -81,12 +81,14 @@ async function connectLdap() {
 
 /** Fetch the LDAP jobs **/
 async function fetchLdapJobs(ldapClient) {
+  let sizeLimit = parseInt(process.env.LDAP_PAGED_LIMIT ? process.env.LDAP_PAGED_LIMIT : 100);
+
   var opts = {
     filter: "(&(objectCategory=person)(objectClass=user))",
     scope: "sub",
     attributes: ["dn", "sn", "cn", ...FIELDS.map(f => f.ldap)],
-    sizeLimit: 100,
-    paged: true
+    sizeLimit: sizeLimit,
+    paged: sizeLimit ? true : false
   };
   return new Promise((resolve, reject) => {
     ldapClient.search(LDAP_SEARCH, opts, function (error, res) {
@@ -197,8 +199,9 @@ function mapCharthopToAd(charthopJobs, adJobs) {
 exports.doesCharthopJobMatch = doesCharthopJobMatch;
 
 exports.handler = async event => {
+  var ldapClient;
   try {
-    var ldapClient = await connectLdap();
+    ldapClient = await connectLdap();
 
     var charthopJobs = [];
     for (var i = 0; i < CHARTHOP_ORG_ID.split(",").length; i++) {
@@ -271,5 +274,11 @@ exports.handler = async event => {
       statusCode: 500,
       body: JSON.stringify({ error })
     };
+  } finally {
+    await new Promise(resolve => {
+      console.log("Disconnecting from LDAP server");
+      ldapClient.unbind(resolve);
+      ldapClient.destroy();
+    });
   }
 };
