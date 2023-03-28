@@ -18,18 +18,11 @@ var SYNC_TESTMATCH = process.env.SYNC_TESTMATCH;
 
 /** Fetch all currently-filled ChartHop jobs from the org roster **/
 async function fetchCharthopJobs(orgId, token) {
-  var fields = FIELDS.map(f => f.charthop).join(",");
-  for (let f of FIELDS) {
-    if (f.charthopExtraFields) {
-      fields += "," + f.charthopExtraFields;
-    }
-  }
-  fields = "jobId," + fields;
+  let fields = FIELDS.map(f => `${f.charthop}${f.charthopExtraFields ? `,${f.charthopExtraFields}` : ""}`).join(",");
+  fields = `jobId,${fields}`;
   return new Promise((resolve, reject) => {
     request(
-      "https://api.charthop.com/v2/org/" + orgId + "/job?" +
-      "limit=10000&format=minimal&q=open:filled&fields=" +
-      fields,
+      `https://api.charthop.com/v2/org/${orgId}/job?limit=10000&format=minimal&q=open:filled&fields=${fields}`,
       { auth: { bearer: token } },
       function (err, resp, body) {
         if (err) {
@@ -70,7 +63,7 @@ async function notifyCharthop(emailSubject, emailContentHtml) {
 
 /** Connect to the LDAP server **/
 async function connectLdap() {
-  console.log("Connecting to LDAP server at " + LDAP_URL);
+  console.log(`Connecting to LDAP server at ${LDAP_URL}`);
 
   var client = ldap.createClient({
     url: LDAP_URL
@@ -146,14 +139,7 @@ async function syncJob(ldapClient, charthopJob, adJob, adJobs) {
         modification
       });
 
-      var changeLog =
-        adJob.cn +
-        "/" +
-        field.ldap +
-        ": " +
-        adJob[field.ldap] +
-        " => " +
-        transformedValue;
+      var changeLog = `${adJob.cn}/${field.ldap}: ${adJob[field.ldap]} => ${transformedValue}`;
 
       if (
         SYNC_ALLOWLIST.length === 0 ||
@@ -168,9 +154,9 @@ async function syncJob(ldapClient, charthopJob, adJob, adJobs) {
             }
           });
         });
-        console.log("Updated: " + changeLog);
+        console.log(`Updated: ${changeLog}`);
       } else {
-        console.log("Skipping, not on allowlist: " + changeLog);
+        console.log(`Skipping, not on allowlist: ${changeLog}`);
       }
 
       syncedFields.push(field.label);
@@ -226,25 +212,23 @@ exports.handler = async event => {
       const token = CHARTHOP_TOKEN.split(",")[i];
       var fetchJobs = await fetchCharthopJobs(orgId, token);
       charthopJobs = [...charthopJobs, ...fetchJobs];
-      console.log(
-        "Fetched " + fetchJobs.length + " jobs from ChartHop org " + orgId
-      );
+      console.log(`Fetched ${fetchJobs.length} jobs from ChartHop org ${orgId}`);
     }
-    console.log("Fetched " + charthopJobs.length + " jobs from ChartHop");
+    console.log(`Fetched ${charthopJobs.length} jobs from ChartHop`);
 
     var adJobs = await fetchLdapJobs(ldapClient);
-    console.log("Fetched " + adJobs.length + " jobs from AD LDAP");
+    console.log(`Fetched ${adJobs.length} jobs from AD LDAP`);
 
     var chMap = mapCharthop(charthopJobs);
     var adMap = mapCharthopToAd(charthopJobs, adJobs);
 
-    console.log("Matched " + Object.keys(adMap).length);
+    console.log(`Matched ${Object.keys(adMap).length}`);
 
     // in SYNC_TESTMATCH mode, always match the AD job matching the SYNC_TESTMATCH with a random ChartHop job
     if (SYNC_TESTMATCH) {
       var testJob =
         charthopJobs[Math.floor(Math.random() * charthopJobs.length)];
-      console.log("Set test job to " + testJob.title + " " + testJob.id);
+      console.log(`Set test job to ${testJob.title} ${testJob.id}`);
       var testAdJobs = adJobs.filter(j => j.cn === SYNC_TESTMATCH);
       if (testAdJobs.length) {
         adMap[testJob.id] = testAdJobs[0];
@@ -262,8 +246,7 @@ exports.handler = async event => {
             updated.push({ adJob, chJob, synced });
           }
         } catch (error) {
-          console.log("Error attempting to update " + adJob.cn);
-          console.log("Error: " + JSON.stringify(error));
+          console.error(`Error attempting to update ${adJob.cn}\nError: ${JSON.stringify(error)}`);
         }
       }
     }
@@ -271,14 +254,9 @@ exports.handler = async event => {
     if (updated.length > 0) {
       var syncHtml = "<p>Updated the following Active Directory entries:</p>";
       for (let upd of updated) {
-        syncHtml +=
-          "<div><b>" +
-          upd.adJob.cn +
-          "</b>: " +
-          upd.synced.join(", ") +
-          "</div>";
+        syncHtml += `<div><b>${upd.adJob.cn}</b>: ${upd.synced.join(", ")}</div>`;
       }
-      await notifyCharthop("Synced " + updated.length + " entries", syncHtml);
+      await notifyCharthop(`Synced ${updated.length} entries`, syncHtml);
     }
 
     return {
@@ -292,11 +270,8 @@ exports.handler = async event => {
   } catch (error) {
     await notifyCharthop(
       "Error completing sync",
-      "<p>There was an unexpected error:</p><br/><div><code>" +
-      JSON.stringify(error) +
-      "</code></div>\n<br/><p>Stack trace:</p><pre>" +
-      error.stack +
-      "</pre>"
+      `<p>There was an unexpected error:</p><br/><div><code>${JSON.stringify(error)}</code></div>\n` +
+      `<br/><p>Stack trace:</p><pre>${error.stack}</pre>`
     );
 
     return {
