@@ -135,10 +135,11 @@ async function syncJob(ldapClient, charthopJob, adJob, adJobs) {
     });
 
     for (const log of changeLog) console.log(`Updated: ${log}`);
+    return syncedFields;
   } else {
     for (const log of changeLog) console.log(`Skipping, not on allowlist: ${log}`);
+    return [];
   }
-  return syncedFields;
 }
 
 /** Given a ChartHop job and an LDAP job, determine whether they match or not **/
