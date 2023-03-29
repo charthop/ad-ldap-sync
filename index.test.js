@@ -1,8 +1,8 @@
 let ldap = require("ldapjs");
-let request = require("request");
+let needle = require("needle");
 let when = require("jest-when");
 
-jest.mock("request");
+jest.mock("needle");
 jest.mock("./fields", () => ({
   FIELDS: [
     { label: "Name", ldap: "displayName", charthop: "name" },
@@ -33,8 +33,11 @@ beforeAll(async () => {
   });
 });
 
-afterAll(() => {
+afterEach(() => {
   ldapServer.removeAllListeners();
+});
+
+afterAll(() => {
   ldapServer.close();
 });
 
@@ -51,38 +54,35 @@ test("does charthop job match", () => {
 });
 
 test("simple sync runs correctly", async () => {
-  request.mockImplementation(options => {
-    throw options;
+  needle.mockImplementation((method, url) => {
+    throw new Error(`Unhandled ${method} request to ${url}`);
   });
 
   when
-    .when(request)
+    .when(needle)
     .calledWith(
+      "GET",
       `https://api.charthop.com/v2/org/test/job?limit=10000&format=minimal&q=open:filled&fields=jobId,name,contact.workEmail`,
-      expect.anything(),
-      expect.anything()
+      expect.objectContaining({ headers: { authorization: `Bearer ${process.env.CHARTHOP_TOKEN}` } })
     )
-    .mockImplementation((u, o, callback) =>
-      callback(
-        undefined,
-        undefined,
-        JSON.stringify({
-          data: [{ jobId: 0, name: "Brian Hartvigsen", "contact.workEmail": "brian.hartvigsen@charthop.com" }]
-        })
-      )
-    );
+    .mockResolvedValue({
+      statusCode: 200,
+      body: {
+        data: [{ jobId: 0, name: "Brian Hartvigsen", "contact.workEmail": "brian.hartvigsen@charthop.com" }]
+      }
+    });
 
   when
-    .when(request)
-    .calledWith(expect.anything(), expect.anything())
-    .mockImplementation((request, callback) => {
-      if (request && request.url === "https://api.charthop.com/v1/app/notify") {
-        if (request && request.json && request.json.subject === "Error completing sync") {
-          throw request;
-        }
-        callback();
-      } else {
-        throw request;
+    .when(needle)
+    .calledWith(
+      "POST",
+      "https://api.charthop.com/v1/app/notify",
+      expect.anything(),
+      expect.objectContaining({ headers: { authorization: `Bearer ${process.env.CHARTHOP_TOKEN}` } })
+    )
+    .mockImplementation((method, url, data) => {
+      if (data?.emailSubject === "Error completing sync") {
+        throw new Error(`Unhandled ${method} request to ${url}\n${JSON.stringify(data)}`);
       }
     });
 

@@ -1,5 +1,5 @@
 var ldap = require("ldapjs");
-var request = require("request");
+var needle = require("needle");
 
 var FIELDS = require("./fields.js").FIELDS;
 var CHARTHOP_ORG_ID = process.env.CHARTHOP_ORG_ID;
@@ -18,45 +18,23 @@ var SYNC_TESTMATCH = process.env.SYNC_TESTMATCH;
 async function fetchCharthopJobs(orgId, token) {
   let fields = FIELDS.map(f => `${f.charthop}${f.charthopExtraFields ? `,${f.charthopExtraFields}` : ""}`).join(",");
   fields = `jobId,${fields}`;
-  return new Promise((resolve, reject) => {
-    request(
-      `https://api.charthop.com/v2/org/${orgId}/job?limit=10000&format=minimal&q=open:filled&fields=${fields}`,
-      { auth: { bearer: token } },
-      function (err, resp, body) {
-        if (err) {
-          reject(err);
-        } else {
-          var bodyData = JSON.parse(body).data;
-          var results = [];
-          for (let row of bodyData) {
-            results.push({ id: row.jobId, ...row });
-          }
-          resolve(results);
-        }
-      }
-    );
+  return needle(
+    "GET",
+    `https://api.charthop.com/v2/org/${orgId}/job?limit=10000&format=minimal&q=open:filled&fields=${fields}`,
+    { headers: { authorization: `Bearer ${token}` } }
+  ).then(resp => {
+    return resp.body.data.map(r => ({ id: r.jobId, ...r }));
   });
 }
 
 /** Send a notification email via ChartHop **/
 async function notifyCharthop(emailSubject, emailContentHtml) {
-  return new Promise((resolve, reject) => {
-    request(
-      {
-        url: "https://api.charthop.com/v1/app/notify",
-        method: "POST",
-        json: { emailSubject, emailContentHtml },
-        auth: { bearer: CHARTHOP_TOKEN_SINGLE }
-      },
-      function (err, resp) {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(resp);
-        }
-      }
-    );
-  });
+  return needle(
+    "POST",
+    "https://api.charthop.com/v1/app/notify",
+    { emailSubject, emailContentHtml },
+    { json: true, headers: { authorization: `Bearer ${CHARTHOP_TOKEN_SINGLE}` } }
+  );
 }
 
 /** Connect to the LDAP server **/
