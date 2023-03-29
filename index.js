@@ -79,9 +79,11 @@ async function fetchLdapJobs(ldapClient) {
       res.on("searchEntry", function (entry) {
         results.push(entry.object);
       });
+
       res.on("error", function (err) {
         reject(err);
       });
+
       res.on("end", function () {
         resolve(results);
       });
@@ -95,6 +97,8 @@ async function syncJob(ldapClient, charthopJob, adJob, adJobs) {
   charthopJob.manager = adJobs[charthopJob.manager] ? adJobs[charthopJob.manager].dn : "";
 
   var syncedFields = [];
+  let changes = [];
+  let changeLog = [];
   for (let field of FIELDS) {
     if (!charthopJob[field.charthop]) {
       continue;
@@ -112,26 +116,27 @@ async function syncJob(ldapClient, charthopJob, adJob, adJobs) {
         operation: "replace",
         modification
       });
+      changes.push(change);
 
-      var changeLog = `${adJob.cn}/${field.ldap}: ${adJob[field.ldap]} => ${transformedValue}`;
-
-      if (SYNC_ALLOWLIST.length === 0 || SYNC_ALLOWLIST.includes(adJob.cn)) {
-        await new Promise((resolve, reject) => {
-          ldapClient.modify(adJob.dn, change, function (err, res) {
-            if (err) {
-              reject(err);
-            } else {
-              resolve(res);
-            }
-          });
-        });
-        console.log(`Updated: ${changeLog}`);
-      } else {
-        console.log(`Skipping, not on allowlist: ${changeLog}`);
-      }
-
+      changeLog.push(`${adJob.cn}/${field.ldap}: ${adJob[field.ldap]} => ${transformedValue}`);
       syncedFields.push(field.label);
     }
+  }
+
+  if (SYNC_ALLOWLIST.length === 0 || SYNC_ALLOWLIST.includes(adJob.cn)) {
+    await new Promise((resolve, reject) => {
+      ldapClient.modify(adJob.dn, changes, function (err, res) {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(res);
+        }
+      });
+    });
+
+    for (const log of changeLog) console.log(`Updated: ${log}`);
+  } else {
+    for (const log of changeLog) console.log(`Skipping, not on allowlist: ${log}`);
   }
   return syncedFields;
 }
