@@ -15,19 +15,9 @@
  */
 
 function transformPhone(phone) {
-  if (phone.length === 12) {
-    return (
-      phone.substring(0, 2) +
-      "-" +
-      phone.substring(2, 5) +
-      "-" +
-      phone.substring(5, 8) +
-      "-" +
-      phone.substring(8)
-    );
-  } else {
-    return phone;
-  }
+  return phone.length === 12
+    ? `${phone.slice(0, 2)}-${phone.slice(2, 5)}-${phone.slice(5, 8)}-${phone.slice(8)}`
+    : phone;
 }
 module.exports.transformPhone = transformPhone;
 
@@ -38,12 +28,8 @@ module.exports.FIELDS = [
     ldap: "givenName",
     charthop: "name.first",
     charthopExtraFields: "name.pref",
-    transform: function(value, job) {
-      if (job["name.pref"]) {
-        return job["name.pref"];
-      } else {
-        return value;
-      }
+    transform: function (value, job) {
+      return job["name.pref"] ?? value;
     }
   },
   {
