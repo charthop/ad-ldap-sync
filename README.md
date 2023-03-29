@@ -21,7 +21,7 @@ Set the Lambda timeout to at least 30 seconds.
 To upload the function code, run:
 
 ```
-yarn install
+yarn install --prod
 zip -r charthop-ad-sync.zip .
 aws lambda update-function-code --function-name charthop-ad-sync --zip-file fileb://charthop-ad-sync.zip
 rm charthop-ad-sync.zip
