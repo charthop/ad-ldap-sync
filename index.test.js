@@ -51,7 +51,7 @@ test("does charthop job match", () => {
 });
 
 test("simple sync runs correctly", async () => {
-  request.mockImplementation((options, callback) => {
+  request.mockImplementation(options => {
     throw options;
   });
 
@@ -64,8 +64,8 @@ test("simple sync runs correctly", async () => {
     )
     .mockImplementation((u, o, callback) =>
       callback(
-        null,
-        null,
+        undefined,
+        undefined,
         JSON.stringify({
           data: [{ jobId: 0, name: "Brian Hartvigsen", "contact.workEmail": "brian.hartvigsen@charthop.com" }]
         })
@@ -80,7 +80,7 @@ test("simple sync runs correctly", async () => {
         if (request && request.json && request.json.subject === "Error completing sync") {
           throw request;
         }
-        callback(null, null, null);
+        callback();
       } else {
         throw request;
       }

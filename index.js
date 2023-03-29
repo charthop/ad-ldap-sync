@@ -48,7 +48,7 @@ async function notifyCharthop(emailSubject, emailContentHtml) {
         json: { emailSubject, emailContentHtml },
         auth: { bearer: CHARTHOP_TOKEN_SINGLE }
       },
-      function (err, resp, body) {
+      function (err, resp) {
         if (err) {
           reject(err);
         } else {
@@ -81,7 +81,7 @@ async function connectLdap() {
 
 /** Fetch the LDAP jobs **/
 async function fetchLdapJobs(ldapClient) {
-  let sizeLimit = parseInt(process.env.LDAP_PAGED_LIMIT ? process.env.LDAP_PAGED_LIMIT : 100);
+  let sizeLimit = Number.parseInt(process.env.LDAP_PAGED_LIMIT ?? 100);
 
   var opts = {
     filter: "(&(objectCategory=person)(objectClass=user))",
@@ -104,7 +104,7 @@ async function fetchLdapJobs(ldapClient) {
       res.on("error", function (err) {
         reject(err);
       });
-      res.on("end", function (result) {
+      res.on("end", function () {
         resolve(results);
       });
     });
@@ -114,11 +114,7 @@ async function fetchLdapJobs(ldapClient) {
 /** Given an LDAP job and a ChartHop job, compare the two and sync any differences **/
 async function syncJob(ldapClient, charthopJob, adJob, adJobs) {
   // assign the charthop manager property, based on finding the DN in the adJobs map
-  if (adJobs[charthopJob.manager]) {
-    charthopJob.manager = adJobs[charthopJob.manager].dn;
-  } else {
-    charthopJob.manager = "";
-  }
+  charthopJob.manager = adJobs[charthopJob.manager] ? adJobs[charthopJob.manager].dn : "";
 
   var syncedFields = [];
   for (let field of FIELDS) {
@@ -141,7 +137,7 @@ async function syncJob(ldapClient, charthopJob, adJob, adJobs) {
 
       var changeLog = `${adJob.cn}/${field.ldap}: ${adJob[field.ldap]} => ${transformedValue}`;
 
-      if (SYNC_ALLOWLIST.length === 0 || SYNC_ALLOWLIST.indexOf(adJob.cn) > -1) {
+      if (SYNC_ALLOWLIST.length === 0 || SYNC_ALLOWLIST.includes(adJob.cn)) {
         await new Promise((resolve, reject) => {
           ldapClient.modify(adJob.dn, change, function (err, res) {
             if (err) {
@@ -159,7 +155,7 @@ async function syncJob(ldapClient, charthopJob, adJob, adJobs) {
       syncedFields.push(field.label);
     }
   }
-  return Promise.resolve(syncedFields);
+  return syncedFields;
 }
 
 /** Given a ChartHop job and an LDAP job, determine whether they match or not **/
@@ -198,7 +194,7 @@ function mapCharthopToAd(charthopJobs, adJobs) {
 
 exports.doesCharthopJobMatch = doesCharthopJobMatch;
 
-exports.handler = async event => {
+exports.handler = async () => {
   var ldapClient;
   try {
     ldapClient = await connectLdap();
@@ -226,7 +222,7 @@ exports.handler = async event => {
       var testJob = charthopJobs[Math.floor(Math.random() * charthopJobs.length)];
       console.log(`Set test job to ${testJob.title} ${testJob.id}`);
       var testAdJobs = adJobs.filter(j => j.cn === SYNC_TESTMATCH);
-      if (testAdJobs.length) {
+      if (testAdJobs.length > 0) {
         adMap[testJob.id] = testAdJobs[0];
       }
     }
@@ -238,7 +234,7 @@ exports.handler = async event => {
       if (chJob && adJob) {
         try {
           var synced = await syncJob(ldapClient, chJob, adJob, adMap);
-          if (synced.length) {
+          if (synced.length > 0) {
             updated.push({ adJob, chJob, synced });
           }
         } catch (error) {
