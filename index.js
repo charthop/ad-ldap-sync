@@ -14,17 +14,30 @@ var LDAP_SEARCH = process.env.LDAP_SEARCH;
 var SYNC_ALLOWLIST = process.env.SYNC_ALLOWLIST ? process.env.SYNC_ALLOWLIST.split(",") : [];
 var SYNC_TESTMATCH = process.env.SYNC_TESTMATCH;
 
+async function recursiveFetchCharthopJobs(orgId, token, fields, next, jobs = []) {
+  return needle(
+    "GET",
+    `https://api.charthop.com/v2/org/${orgId}/job`,
+    { limit: 1000, format: "minimal", q: "open:filled", fields: fields, from: next ?? "" },
+    {
+      headers: { authorization: `Bearer ${token}` }
+    }
+  ).then(resp => {
+    let batch = resp.body.data.map(r => ({ id: r.jobId, ...r }));
+    jobs = [...jobs, ...batch];
+    console.log(`Got ${batch.length} jobs and ${resp.body.next} token`);
+    if (resp.body.next) {
+      return recursiveFetchCharthopJobs(orgId, token, fields, resp.body.next, jobs);
+    }
+    return jobs;
+  });
+}
+
 /** Fetch all currently-filled ChartHop jobs from the org roster **/
 async function fetchCharthopJobs(orgId, token) {
   let fields = FIELDS.map(f => `${f.charthop}${f.charthopExtraFields ? `,${f.charthopExtraFields}` : ""}`).join(",");
   fields = `jobId,${fields}`;
-  return needle(
-    "GET",
-    `https://api.charthop.com/v2/org/${orgId}/job?limit=10000&format=minimal&q=open:filled&fields=${fields}`,
-    { headers: { authorization: `Bearer ${token}` } }
-  ).then(resp => {
-    return resp.body.data.map(r => ({ id: r.jobId, ...r }));
-  });
+  return recursiveFetchCharthopJobs(orgId, token, fields);
 }
 
 /** Send a notification email via ChartHop **/

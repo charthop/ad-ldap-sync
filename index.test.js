@@ -11,6 +11,21 @@ jest.mock("./fields", () => ({
 }));
 
 let ldapServer = ldap.createServer();
+let onSearch;
+let onModify;
+let onBind;
+
+ldapServer.search("", (req, res, next) => {
+  return onSearch(req, res, next);
+});
+
+ldapServer.modify("", (req, res, next) => {
+  return onModify(req, res, next);
+});
+
+ldapServer.bind("", (req, res, next) => {
+  return onBind(req, res, next);
+});
 
 beforeAll(async () => {
   await new Promise(resolve =>
@@ -27,10 +42,13 @@ beforeAll(async () => {
   process.env.LDAP_SEARCH = "o=example";
   process.env.LDAP_PAGED_LIMIT = "0";
 
-  ldapServer.bind("cn=user", (req, res, next) => {
-    res.end();
-    return next();
-  });
+  onModify =
+    onSearch =
+    onBind =
+      (req, res, next) => {
+        res.end();
+        return next();
+      };
 });
 
 afterEach(() => {
@@ -62,10 +80,11 @@ test("simple sync runs correctly", async () => {
     .when(needle)
     .calledWith(
       "GET",
-      `https://api.charthop.com/v2/org/test/job?limit=10000&format=minimal&q=open:filled&fields=jobId,name,contact.workEmail`,
+      `https://api.charthop.com/v2/org/test/job`,
+      { limit: 1000, format: "minimal", q: "open:filled", fields: "jobId,name,contact.workEmail", from: "" },
       expect.objectContaining({ headers: { authorization: `Bearer ${process.env.CHARTHOP_TOKEN}` } })
     )
-    .mockResolvedValue({
+    .mockResolvedValueOnce({
       statusCode: 200,
       body: {
         data: [{ jobId: 0, name: "Brian Hartvigsen", "contact.workEmail": "brian.hartvigsen@charthop.com" }]
@@ -86,7 +105,7 @@ test("simple sync runs correctly", async () => {
       }
     });
 
-  ldapServer.search(process.env.LDAP_SEARCH, (req, res, next) => {
+  onSearch = (req, res, next) => {
     res.send({
       dn: req.dn.toString(),
       attributes: {
@@ -98,12 +117,86 @@ test("simple sync runs correctly", async () => {
     });
     res.end();
     return next();
-  });
+  };
 
-  ldapServer.modify("", (req, res, next) => {
+  onModify = (req, res, next) => {
     res.end();
     return next();
+  };
+
+  let sync = require("./index");
+  await sync.handler();
+  when.verifyAllWhenMocksCalled();
+});
+
+test("supports pagination", async () => {
+  needle.mockImplementation((method, url) => {
+    throw new Error(`Unhandled ${method} request to ${url}`);
   });
+
+  when
+    .when(needle)
+    .calledWith(
+      "GET",
+      `https://api.charthop.com/v2/org/test/job`,
+      { limit: 1000, format: "minimal", q: "open:filled", fields: "jobId,name,contact.workEmail", from: "" },
+      expect.objectContaining({ headers: { authorization: `Bearer ${process.env.CHARTHOP_TOKEN}` } })
+    )
+    .mockResolvedValueOnce({
+      statusCode: 200,
+      body: {
+        data: [{ jobId: 0, name: "Brian Hartvigsen", "contact.workEmail": "brian.hartvigsen@charthop.com" }],
+        next: "2"
+      }
+    });
+
+  when
+    .when(needle)
+    .calledWith(
+      "GET",
+      `https://api.charthop.com/v2/org/test/job`,
+      { limit: 1000, format: "minimal", q: "open:filled", fields: "jobId,name,contact.workEmail", from: "2" },
+      expect.objectContaining({ headers: { authorization: `Bearer ${process.env.CHARTHOP_TOKEN}` } })
+    )
+    .mockResolvedValueOnce({
+      statusCode: 200,
+      body: {
+        data: [{ jobId: 0, name: "John Doe", "contact.workEmail": "john.doe@example.com" }]
+      }
+    });
+
+  when
+    .when(needle)
+    .calledWith(
+      "POST",
+      "https://api.charthop.com/v1/app/notify",
+      expect.anything(),
+      expect.objectContaining({ headers: { authorization: `Bearer ${process.env.CHARTHOP_TOKEN}` } })
+    )
+    .mockImplementation((method, url, data) => {
+      if (data?.emailSubject === "Error completing sync") {
+        throw new Error(`Unhandled ${method} request to ${url}\n${JSON.stringify(data)}`);
+      }
+    });
+
+  onSearch = (req, res, next) => {
+    res.send({
+      dn: req.dn.toString(),
+      attributes: {
+        objectclass: ["organization", "top"],
+        displayName: "Berty McBertBert",
+        mail: "brian.hartvigsen@charthop.com",
+        cn: "brian.hartvigsen"
+      }
+    });
+    res.end();
+    return next();
+  };
+
+  onModify = (req, res, next) => {
+    res.end();
+    return next();
+  };
 
   let sync = require("./index");
   await sync.handler();
