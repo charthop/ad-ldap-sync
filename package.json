@@ -16,7 +16,7 @@
   ],
   "dependencies": {
     "ldapjs": "^2.3.3",
-    "request": "^2.88.0"
+    "needle": "^3.2.0"
   },
   "devDependencies": {
     "eslint": "^8.37.0",

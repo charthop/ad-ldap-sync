@@ -1,5 +1,5 @@
 var ldap = require("ldapjs");
-var request = require("request");
+var needle = require("needle");
 
 var FIELDS = require("./fields.js").FIELDS;
 var CHARTHOP_ORG_ID = process.env.CHARTHOP_ORG_ID;
@@ -14,49 +14,40 @@ var LDAP_SEARCH = process.env.LDAP_SEARCH;
 var SYNC_ALLOWLIST = process.env.SYNC_ALLOWLIST ? process.env.SYNC_ALLOWLIST.split(",") : [];
 var SYNC_TESTMATCH = process.env.SYNC_TESTMATCH;
 
+async function recursiveFetchCharthopJobs(orgId, token, fields, next, jobs = []) {
+  return needle(
+    "GET",
+    `https://api.charthop.com/v2/org/${orgId}/job`,
+    { limit: 1000, format: "minimal", q: "open:filled", fields: fields, from: next ?? "" },
+    {
+      headers: { authorization: `Bearer ${token}` }
+    }
+  ).then(resp => {
+    let batch = resp.body.data.map(r => ({ id: r.jobId, ...r }));
+    jobs = [...jobs, ...batch];
+    console.log(`Got ${batch.length} jobs and ${resp.body.next} token`);
+    if (resp.body.next) {
+      return recursiveFetchCharthopJobs(orgId, token, fields, resp.body.next, jobs);
+    }
+    return jobs;
+  });
+}
+
 /** Fetch all currently-filled ChartHop jobs from the org roster **/
 async function fetchCharthopJobs(orgId, token) {
   let fields = FIELDS.map(f => `${f.charthop}${f.charthopExtraFields ? `,${f.charthopExtraFields}` : ""}`).join(",");
   fields = `jobId,${fields}`;
-  return new Promise((resolve, reject) => {
-    request(
-      `https://api.charthop.com/v2/org/${orgId}/job?limit=10000&format=minimal&q=open:filled&fields=${fields}`,
-      { auth: { bearer: token } },
-      function (err, resp, body) {
-        if (err) {
-          reject(err);
-        } else {
-          var bodyData = JSON.parse(body).data;
-          var results = [];
-          for (let row of bodyData) {
-            results.push({ id: row.jobId, ...row });
-          }
-          resolve(results);
-        }
-      }
-    );
-  });
+  return recursiveFetchCharthopJobs(orgId, token, fields);
 }
 
 /** Send a notification email via ChartHop **/
 async function notifyCharthop(emailSubject, emailContentHtml) {
-  return new Promise((resolve, reject) => {
-    request(
-      {
-        url: "https://api.charthop.com/v1/app/notify",
-        method: "POST",
-        json: { emailSubject, emailContentHtml },
-        auth: { bearer: CHARTHOP_TOKEN_SINGLE }
-      },
-      function (err, resp) {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(resp);
-        }
-      }
-    );
-  });
+  return needle(
+    "POST",
+    "https://api.charthop.com/v1/app/notify",
+    { emailSubject, emailContentHtml },
+    { json: true, headers: { authorization: `Bearer ${CHARTHOP_TOKEN_SINGLE}` } }
+  );
 }
 
 /** Connect to the LDAP server **/
@@ -101,9 +92,11 @@ async function fetchLdapJobs(ldapClient) {
       res.on("searchEntry", function (entry) {
         results.push(entry.object);
       });
+
       res.on("error", function (err) {
         reject(err);
       });
+
       res.on("end", function () {
         resolve(results);
       });
@@ -117,6 +110,8 @@ async function syncJob(ldapClient, charthopJob, adJob, adJobs) {
   charthopJob.manager = adJobs[charthopJob.manager] ? adJobs[charthopJob.manager].dn : "";
 
   var syncedFields = [];
+  let changes = [];
+  let changeLog = [];
   for (let field of FIELDS) {
     if (!charthopJob[field.charthop]) {
       continue;
@@ -134,28 +129,30 @@ async function syncJob(ldapClient, charthopJob, adJob, adJobs) {
         operation: "replace",
         modification
       });
+      changes.push(change);
 
-      var changeLog = `${adJob.cn}/${field.ldap}: ${adJob[field.ldap]} => ${transformedValue}`;
-
-      if (SYNC_ALLOWLIST.length === 0 || SYNC_ALLOWLIST.includes(adJob.cn)) {
-        await new Promise((resolve, reject) => {
-          ldapClient.modify(adJob.dn, change, function (err, res) {
-            if (err) {
-              reject(err);
-            } else {
-              resolve(res);
-            }
-          });
-        });
-        console.log(`Updated: ${changeLog}`);
-      } else {
-        console.log(`Skipping, not on allowlist: ${changeLog}`);
-      }
-
+      changeLog.push(`${adJob.cn}/${field.ldap}: ${adJob[field.ldap]} => ${transformedValue}`);
       syncedFields.push(field.label);
     }
   }
-  return syncedFields;
+
+  if (SYNC_ALLOWLIST.length === 0 || SYNC_ALLOWLIST.includes(adJob.cn)) {
+    await new Promise((resolve, reject) => {
+      ldapClient.modify(adJob.dn, changes, function (err, res) {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(res);
+        }
+      });
+    });
+
+    for (const log of changeLog) console.log(`Updated: ${log}`);
+    return syncedFields;
+  } else {
+    for (const log of changeLog) console.log(`Skipping, not on allowlist: ${log}`);
+    return [];
+  }
 }
 
 /** Given a ChartHop job and an LDAP job, determine whether they match or not **/
